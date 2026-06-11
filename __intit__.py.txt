@@ -1,0 +1,64 @@
+import pandas as pd
+import numpy as np
+def validate_data(df):
+    summary = {
+        "rows": df.shape[0],
+        "columns": df.shape[1],
+        "missing_values": df.isnull().sum().to_dict(),
+        "duplicate_records": df.duplicated().sum(),
+        "negative_spends": {}
+    }
+    numeric_cols = df.select_dtypes(include=[np.number]).columns
+    for col in numeric_cols:
+        summary["negative_spends"][col] = (df[col] < 0).sum()
+    return summary
+def prepare_data(df):
+    df_clean = df.copy()
+    
+    # Identify Month and Target columns
+    if 'Month' in df_clean.columns:
+        df_clean['Month'] = pd.to_datetime(df_clean['Month'])
+        df_clean = df_clean.sort_values(by='Month').reset_index(drop=True)
+    
+    # Identify Spend columns (assuming columns other than Month and Sales are spends)
+    spend_cols = [c for c in df_clean.columns if c not in ['Month', 'Sales']]
+    
+    # Fill missing with 0 for spends, remove duplicates
+    df_clean[spend_cols] = df_clean[spend_cols].fillna(0)
+    df_clean = df_clean.drop_duplicates()
+    
+    return df_clean, spend_cols
+def apply_lag_analysis(df, spend_cols, target='Sales'):
+    df_lagged = df.copy()
+    preferred_lags = {}
+    
+    for col in spend_cols:
+        corr_0 = df[col].corr(df[target])
+        corr_1 = df[col].shift(1).corr(df[target])
+        corr_2 = df[col].shift(2).corr(df[target])
+        
+        # Handle NA correlations
+        corr_1 = 0 if pd.isna(corr_1) else corr_1
+        corr_2 = 0 if pd.isna(corr_2) else corr_2
+        
+        corrs = {0: corr_0, 1: corr_1, 2: corr_2}
+        best_lag = max(corrs, key=corrs.get)
+        preferred_lags[col] = best_lag
+        
+        if best_lag > 0:
+            df_lagged[col] = df[col].shift(best_lag).fillna(0)
+            
+    return df_lagged, preferred_lags
+def apply_adstock(df, spend_cols, theta):
+    df_adstocked = df.copy()
+    
+    for col in spend_cols:
+        adstocked_series = np.zeros(len(df))
+        adstocked_series[0] = df[col].iloc[0]
+        
+        for i in range(1, len(df)):
+            adstocked_series[i] = df[col].iloc[i] + theta * adstocked_series[i-1]
+            
+        df_adstocked[col] = adstocked_series
+        
+    return df_adstocked
