@@ -1,0 +1,9 @@
+{
+  "name": "rekha-neeli-portfolio",
+  "version": "1.0.0",
+  "type": "module",
+  "dependencies": {
+    "@netlify/database": "^1.0.0",
+    "@netlify/functions": "^2.8.1"
+  }
+}
